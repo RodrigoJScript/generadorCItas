@@ -1,8 +1,8 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
-	"html/template"
 	"log"
 	"math/rand"
 	"net/http"
@@ -115,75 +115,49 @@ func main() {
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/static/", http.StripPrefix("/static/", fs))
 
-	http.HandleFunc("/", indexHandler)
-	http.HandleFunc("/generar", generar)
-	http.HandleFunc("/generated_quotes", generatedQuotesHandler)
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "./static/index.html")
+	})
+
+	http.HandleFunc("/api/quote", generateQuoteHandler)
+	http.HandleFunc("/api/quotes", getQuotesHandler)
 
 	fmt.Println("Server is running on port 8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-func indexHandler(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := template.ParseFiles("templates/index.html")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	data := struct {
-		Title string
-		Quote string
-	}{
-		Title: "Generador de Citas",
-		Quote: "",
-	}
-	err = tmpl.Execute(w, data)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-}
-
-func generatedQuotesHandler(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := template.ParseFiles("templates/generated_quotes.html")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	data := struct {
-		GeneratedQuotes []string
-	}{
-		GeneratedQuotes: generatedQuotes,
-	}
-	err = tmpl.Execute(w, data)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-}
-
-func generar(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := template.ParseFiles("templates/index.html")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+func generateQuoteHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	numeroAleatorio := generarNumeroAleatorio()
 	quote := quotesArray[numeroAleatorio]
 	generatedQuotes = append(generatedQuotes, quote)
-	data := struct {
-		Title string
-		Quote string
-	}{
-		Title: "Generador de Citas",
-		Quote: quote,
+
+	response := map[string]interface{}{
+		"quote": quote,
+		"total": len(generatedQuotes),
 	}
-	err = tmpl.Execute(w, data)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func getQuotesHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	response := map[string]interface{}{
+		"quotes": generatedQuotes,
+		"total":  len(generatedQuotes),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 func generarNumeroAleatorio() int {
